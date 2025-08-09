@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, MessageCircle, Plus, ThumbsUp, ThumbsDown, User, Bot, X, Send, Eye, Clock, Tag } from 'lucide-react';
+import { Search, MessageCircle, Plus, ThumbsUp, ThumbsDown, User, Bot, X, Send, Eye, Clock, Tag, CheckCircle, AlertTriangle, Globe, Users } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Textarea } from './components/ui/textarea';
@@ -9,9 +9,17 @@ import { Avatar, AvatarFallback } from './components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Separator } from './components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
 import './App.css';
 
 const API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
+
+// Immigration categories for better organization
+const IMMIGRATION_CATEGORIES = [
+  'visa-immigration', 'legal-rights', 'employment', 'healthcare', 'housing', 
+  'education', 'taxes-finance', 'cultural-adaptation', 'family-immigration', 
+  'citizenship', 'documents', 'social-services', 'language-learning', 'emergency-help'
+];
 
 function App() {
   const [questions, setQuestions] = useState([]);
@@ -25,13 +33,17 @@ function App() {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
   // Auth forms
   const [loginData, setLoginData] = useState({ username: '', password: '' });
-  const [registerData, setRegisterData] = useState({ username: '', email: '', password: '', full_name: '', bio: '' });
+  const [registerData, setRegisterData] = useState({ 
+    username: '', email: '', password: '', full_name: '', bio: '', 
+    origin_country: '', current_location: '', immigration_status: ''
+  });
   
   // Question form
-  const [questionData, setQuestionData] = useState({ title: '', content: '', tags: '' });
+  const [questionData, setQuestionData] = useState({ title: '', content: '', tags: '', category: '', urgency: 'normal' });
   const [answerContent, setAnswerContent] = useState('');
 
   useEffect(() => {
@@ -111,7 +123,10 @@ function App() {
       setToken(response.access_token);
       localStorage.setItem('token', response.access_token);
       setLoginData({ username: '', password: '' });
-      setRegisterData({ username: '', email: '', password: '', full_name: '', bio: '' });
+      setRegisterData({ 
+        username: '', email: '', password: '', full_name: '', bio: '',
+        origin_country: '', current_location: '', immigration_status: ''
+      });
     } catch (error) {
       alert(error.message);
     }
@@ -130,11 +145,13 @@ function App() {
         body: JSON.stringify({
           title: questionData.title,
           content: questionData.content,
-          tags: tags
+          tags: [...tags, questionData.category],
+          category: questionData.category,
+          urgency: questionData.urgency
         }),
       });
       
-      setQuestionData({ title: '', content: '', tags: '' });
+      setQuestionData({ title: '', content: '', tags: '', category: '', urgency: 'normal' });
       fetchQuestions();
     } catch (error) {
       alert(error.message);
@@ -148,10 +165,24 @@ function App() {
     
     setLoading(true);
     try {
-      await apiRequest(`/api/questions/${currentQuestion.id}/answers`, {
+      const answer = await apiRequest(`/api/questions/${currentQuestion.id}/answers`, {
         method: 'POST',
         body: JSON.stringify({ content: answerContent }),
       });
+      
+      // Trigger AI fact-checking
+      try {
+        await apiRequest('/api/fact-check-answer', {
+          method: 'POST',
+          body: JSON.stringify({
+            answer_id: answer.id,
+            question_title: currentQuestion.title,
+            answer_content: answerContent
+          }),
+        });
+      } catch (factCheckError) {
+        console.error('Fact-check failed:', factCheckError);
+      }
       
       setAnswerContent('');
       fetchQuestion(currentQuestion.id);
@@ -192,7 +223,7 @@ function App() {
     setChatInput('');
     
     try {
-      const response = await apiRequest('/api/chat', {
+      const response = await apiRequest('/api/immigration-chat', {
         method: 'POST',
         body: JSON.stringify({ message: chatInput }),
       });
@@ -238,14 +269,36 @@ function App() {
     setAnswers([]);
   };
 
+  const getUrgencyColor = (urgency) => {
+    switch (urgency) {
+      case 'urgent': return 'text-red-600 border-red-200 bg-red-50';
+      case 'high': return 'text-orange-600 border-orange-200 bg-orange-50';
+      default: return 'text-blue-600 border-blue-200 bg-blue-50';
+    }
+  };
+
+  const getAnswerVerificationStatus = (answer) => {
+    if (answer.ai_verification?.is_verified === true) {
+      return { icon: CheckCircle, color: 'text-green-600', text: 'AI Verified' };
+    } else if (answer.ai_verification?.is_verified === false) {
+      return { icon: AlertTriangle, color: 'text-yellow-600', text: 'Needs Review' };
+    }
+    return null;
+  };
+
   if (!token) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
         <div className="container mx-auto px-4 py-16">
           <div className="max-w-md mx-auto">
             <div className="text-center mb-8">
-              <h1 className="text-4xl font-bold text-slate-800 mb-2">QA Platform</h1>
-              <p className="text-slate-600">Professional Q&A Community with AI Assistant</p>
+              <div className="flex items-center justify-center mb-4">
+                <Globe className="h-12 w-12 text-indigo-600 mr-3" />
+                <Users className="h-10 w-10 text-blue-600" />
+              </div>
+              <h1 className="text-4xl font-bold text-slate-800 mb-2">ImmigrantConnect</h1>
+              <p className="text-slate-600">Trusted Q&A Community for Immigrants with AI Fact-Checking</p>
+              <p className="text-sm text-slate-500 mt-2">Get reliable answers to your immigration questions from the community, verified by AI</p>
             </div>
             
             <Card>
@@ -253,7 +306,7 @@ function App() {
                 <Tabs value={authMode} onValueChange={setAuthMode}>
                   <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="login">Login</TabsTrigger>
-                    <TabsTrigger value="register">Register</TabsTrigger>
+                    <TabsTrigger value="register">Join Community</TabsTrigger>
                   </TabsList>
                 </Tabs>
               </CardHeader>
@@ -273,7 +326,7 @@ function App() {
                       onChange={(e) => setLoginData({...loginData, password: e.target.value})}
                       required
                     />
-                    <Button type="submit" className="w-full" disabled={loading}>
+                    <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700" disabled={loading}>
                       {loading ? 'Logging in...' : 'Login'}
                     </Button>
                   </form>
@@ -298,10 +351,26 @@ function App() {
                       onChange={(e) => setRegisterData({...registerData, full_name: e.target.value})}
                       required
                     />
+                    <Input
+                      placeholder="Origin Country"
+                      value={registerData.origin_country}
+                      onChange={(e) => setRegisterData({...registerData, origin_country: e.target.value})}
+                    />
+                    <Input
+                      placeholder="Current Location"
+                      value={registerData.current_location}
+                      onChange={(e) => setRegisterData({...registerData, current_location: e.target.value})}
+                    />
+                    <Input
+                      placeholder="Immigration Status (optional)"
+                      value={registerData.immigration_status}
+                      onChange={(e) => setRegisterData({...registerData, immigration_status: e.target.value})}
+                    />
                     <Textarea
-                      placeholder="Bio (optional)"
+                      placeholder="Brief bio - How long have you been in your new country? What's your background?"
                       value={registerData.bio}
                       onChange={(e) => setRegisterData({...registerData, bio: e.target.value})}
+                      rows={3}
                     />
                     <Input
                       type="password"
@@ -310,8 +379,8 @@ function App() {
                       onChange={(e) => setRegisterData({...registerData, password: e.target.value})}
                       required
                     />
-                    <Button type="submit" className="w-full" disabled={loading}>
-                      {loading ? 'Creating account...' : 'Register'}
+                    <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700" disabled={loading}>
+                      {loading ? 'Creating account...' : 'Join Community'}
                     </Button>
                   </form>
                 )}
@@ -326,22 +395,20 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white shadow-sm border-b border-slate-200">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <h1 
-                className="text-2xl font-bold text-slate-800 cursor-pointer"
-                onClick={() => {
-                  setCurrentQuestion(null);
-                  fetchQuestions();
-                }}
-              >
-                QA Platform
-              </h1>
+              <div className="flex items-center space-x-2 cursor-pointer" onClick={() => {
+                setCurrentQuestion(null);
+                fetchQuestions();
+              }}>
+                <Globe className="h-8 w-8 text-indigo-600" />
+                <h1 className="text-2xl font-bold text-slate-800">ImmigrantConnect</h1>
+              </div>
               <div className="hidden md:flex items-center space-x-2">
                 <Input
-                  placeholder="Search questions..."
+                  placeholder="Search immigration questions..."
                   className="w-64"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -356,36 +423,75 @@ function App() {
             <div className="flex items-center space-x-4">
               <Dialog>
                 <DialogTrigger asChild>
-                  <Button>
+                  <Button className="bg-indigo-600 hover:bg-indigo-700">
                     <Plus className="h-4 w-4 mr-2" />
                     Ask Question
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-2xl">
                   <DialogHeader>
-                    <DialogTitle>Ask a Question</DialogTitle>
+                    <DialogTitle>Ask the Immigration Community</DialogTitle>
                   </DialogHeader>
                   <form onSubmit={handleCreateQuestion} className="space-y-4">
                     <Input
-                      placeholder="Question title..."
+                      placeholder="What's your immigration question?"
                       value={questionData.title}
                       onChange={(e) => setQuestionData({...questionData, title: e.target.value})}
                       required
                     />
                     <Textarea
-                      placeholder="Describe your question in detail..."
+                      placeholder="Provide detailed context about your situation, location, and any specific requirements..."
                       rows={6}
                       value={questionData.content}
                       onChange={(e) => setQuestionData({...questionData, content: e.target.value})}
                       required
                     />
+                    <div className="grid grid-cols-2 gap-4">
+                      <Select 
+                        value={questionData.category} 
+                        onValueChange={(value) => setQuestionData({...questionData, category: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="visa-immigration">Visa & Immigration</SelectItem>
+                          <SelectItem value="legal-rights">Legal Rights</SelectItem>
+                          <SelectItem value="employment">Employment</SelectItem>
+                          <SelectItem value="healthcare">Healthcare</SelectItem>
+                          <SelectItem value="housing">Housing</SelectItem>
+                          <SelectItem value="education">Education</SelectItem>
+                          <SelectItem value="taxes-finance">Taxes & Finance</SelectItem>
+                          <SelectItem value="cultural-adaptation">Cultural Adaptation</SelectItem>
+                          <SelectItem value="family-immigration">Family Immigration</SelectItem>
+                          <SelectItem value="citizenship">Citizenship</SelectItem>
+                          <SelectItem value="documents">Documents</SelectItem>
+                          <SelectItem value="social-services">Social Services</SelectItem>
+                          <SelectItem value="language-learning">Language Learning</SelectItem>
+                          <SelectItem value="emergency-help">Emergency Help</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select 
+                        value={questionData.urgency} 
+                        onValueChange={(value) => setQuestionData({...questionData, urgency: value})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Urgency level" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="normal">Normal</SelectItem>
+                          <SelectItem value="high">High Priority</SelectItem>
+                          <SelectItem value="urgent">Urgent</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <Input
-                      placeholder="Tags (comma-separated, e.g. javascript, react, nodejs)"
+                      placeholder="Additional tags (comma-separated, e.g. H1B, green-card, work-permit)"
                       value={questionData.tags}
                       onChange={(e) => setQuestionData({...questionData, tags: e.target.value})}
                     />
                     <div className="flex justify-end space-x-2">
-                      <Button type="submit" disabled={loading}>
+                      <Button type="submit" disabled={loading || !questionData.category}>
                         {loading ? 'Posting...' : 'Post Question'}
                       </Button>
                     </div>
@@ -399,9 +505,12 @@ function App() {
                     {user?.full_name?.charAt(0) || 'U'}
                   </AvatarFallback>
                 </Avatar>
-                <span className="hidden md:inline text-sm text-slate-600">
-                  {user?.full_name} ({user?.reputation} rep)
-                </span>
+                <div className="hidden md:block">
+                  <div className="text-sm font-medium text-slate-800">{user?.full_name}</div>
+                  <div className="text-xs text-slate-600">
+                    {user?.reputation || 0} reputation • {user?.origin_country || 'Community Member'}
+                  </div>
+                </div>
                 <Button variant="outline" size="sm" onClick={logout}>
                   Logout
                 </Button>
@@ -426,25 +535,32 @@ function App() {
                 <CardContent className="text-center py-12">
                   <MessageCircle className="h-12 w-12 mx-auto text-slate-400 mb-4" />
                   <h3 className="text-lg font-medium text-slate-600 mb-2">No questions yet</h3>
-                  <p className="text-slate-500">Be the first to ask a question!</p>
+                  <p className="text-slate-500">Be the first to ask the community for help!</p>
                 </CardContent>
               </Card>
             ) : (
               questions.map((question) => (
-                <Card key={question.id} className="hover:shadow-md transition-shadow cursor-pointer">
+                <Card key={question.id} className="hover:shadow-md transition-shadow cursor-pointer card-interactive">
                   <CardContent className="p-6">
                     <div className="flex justify-between items-start">
                       <div className="flex-1 mr-4">
-                        <h3 
-                          className="text-lg font-medium text-slate-800 mb-2 hover:text-blue-600"
-                          onClick={() => fetchQuestion(question.id)}
-                        >
-                          {question.title}
-                        </h3>
+                        <div className="flex items-start justify-between mb-2">
+                          <h3 
+                            className="text-lg font-medium text-slate-800 hover:text-indigo-600 mr-4"
+                            onClick={() => fetchQuestion(question.id)}
+                          >
+                            {question.title}
+                          </h3>
+                          {question.urgency && question.urgency !== 'normal' && (
+                            <Badge className={`${getUrgencyColor(question.urgency)} border`}>
+                              {question.urgency}
+                            </Badge>
+                          )}
+                        </div>
                         <p className="text-slate-600 mb-3 line-clamp-2">
                           {question.content}
                         </p>
-                        <div className="flex items-center space-x-4 text-sm text-slate-500">
+                        <div className="flex items-center space-x-4 text-sm text-slate-500 mb-3">
                           <div className="flex items-center">
                             <User className="h-4 w-4 mr-1" />
                             {question.author_username}
@@ -458,9 +574,9 @@ function App() {
                             {question.views}
                           </div>
                         </div>
-                        <div className="flex items-center space-x-2 mt-3">
+                        <div className="flex items-center space-x-2">
                           {question.tags.map((tag, index) => (
-                            <Badge key={index} variant="secondary">
+                            <Badge key={index} variant="secondary" className="immigration-tag">
                               <Tag className="h-3 w-3 mr-1" />
                               {tag}
                             </Badge>
@@ -474,7 +590,7 @@ function App() {
                           <div className="text-xs text-slate-500">votes</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-lg font-semibold text-green-600">{question.answers_count}</div>
+                          <div className="text-lg font-semibold text-indigo-600">{question.answers_count}</div>
                           <div className="text-xs text-slate-500">answers</div>
                         </div>
                       </div>
@@ -500,9 +616,16 @@ function App() {
             {/* Question */}
             <Card>
               <CardContent className="p-6">
-                <h1 className="text-2xl font-bold text-slate-800 mb-4">
-                  {currentQuestion.title}
-                </h1>
+                <div className="flex items-start justify-between mb-4">
+                  <h1 className="text-2xl font-bold text-slate-800 flex-1">
+                    {currentQuestion.title}
+                  </h1>
+                  {currentQuestion.urgency && currentQuestion.urgency !== 'normal' && (
+                    <Badge className={`${getUrgencyColor(currentQuestion.urgency)} border ml-4`}>
+                      {currentQuestion.urgency}
+                    </Badge>
+                  )}
+                </div>
                 <div className="flex items-center space-x-4 text-sm text-slate-500 mb-4">
                   <div className="flex items-center">
                     <User className="h-4 w-4 mr-1" />
@@ -523,7 +646,7 @@ function App() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     {currentQuestion.tags.map((tag, index) => (
-                      <Badge key={index} variant="secondary">
+                      <Badge key={index} variant="secondary" className="immigration-tag">
                         <Tag className="h-3 w-3 mr-1" />
                         {tag}
                       </Badge>
@@ -557,62 +680,87 @@ function App() {
               </h2>
               
               <div className="space-y-4">
-                {answers.map((answer) => (
-                  <Card key={answer.id}>
-                    <CardContent className="p-6">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1 mr-4">
-                          <p className="text-slate-700 mb-3 whitespace-pre-wrap">
-                            {answer.content}
-                          </p>
-                          <div className="flex items-center space-x-4 text-sm text-slate-500">
-                            <div className="flex items-center">
-                              <User className="h-4 w-4 mr-1" />
-                              {answer.author_username}
+                {answers.map((answer) => {
+                  const verificationStatus = getAnswerVerificationStatus(answer);
+                  return (
+                    <Card key={answer.id}>
+                      <CardContent className="p-6">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1 mr-4">
+                            <div className="flex items-center space-x-2 mb-3">
+                              {verificationStatus && (
+                                <div className={`flex items-center space-x-1 ${verificationStatus.color}`}>
+                                  <verificationStatus.icon className="h-4 w-4" />
+                                  <span className="text-sm font-medium">{verificationStatus.text}</span>
+                                </div>
+                              )}
                             </div>
-                            <div className="flex items-center">
-                              <Clock className="h-4 w-4 mr-1" />
-                              {formatDate(answer.created_at)}
+                            <p className="text-slate-700 mb-3 whitespace-pre-wrap">
+                              {answer.content}
+                            </p>
+                            {answer.ai_verification?.feedback && (
+                              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3">
+                                <div className="flex items-start space-x-2">
+                                  <Bot className="h-4 w-4 text-indigo-600 mt-0.5" />
+                                  <div>
+                                    <div className="text-sm font-medium text-slate-700 mb-1">AI Verification Notes:</div>
+                                    <div className="text-sm text-slate-600">{answer.ai_verification.feedback}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            <div className="flex items-center space-x-4 text-sm text-slate-500">
+                              <div className="flex items-center">
+                                <User className="h-4 w-4 mr-1" />
+                                {answer.author_username}
+                              </div>
+                              <div className="flex items-center">
+                                <Clock className="h-4 w-4 mr-1" />
+                                {formatDate(answer.created_at)}
+                              </div>
                             </div>
                           </div>
+                          <div className="flex items-center space-x-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleVote(answer.id, 'answer', 1)}
+                            >
+                              <ThumbsUp className="h-4 w-4 mr-1" />
+                              {answer.votes}
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleVote(answer.id, 'answer', -1)}
+                            >
+                              <ThumbsDown className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleVote(answer.id, 'answer', 1)}
-                          >
-                            <ThumbsUp className="h-4 w-4 mr-1" />
-                            {answer.votes}
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleVote(answer.id, 'answer', -1)}
-                          >
-                            <ThumbsDown className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
 
               {/* Answer Form */}
               <Card className="mt-6">
                 <CardContent className="p-6">
-                  <h3 className="text-lg font-medium text-slate-800 mb-4">Your Answer</h3>
+                  <h3 className="text-lg font-medium text-slate-800 mb-4">Share Your Knowledge</h3>
+                  <p className="text-sm text-slate-600 mb-4">
+                    Help a fellow immigrant by sharing your experience. Our AI will verify the accuracy of your answer.
+                  </p>
                   <form onSubmit={handleCreateAnswer} className="space-y-4">
                     <Textarea
-                      placeholder="Write your answer..."
+                      placeholder="Share your experience and knowledge... Be specific about processes, requirements, and any helpful details."
                       rows={6}
                       value={answerContent}
                       onChange={(e) => setAnswerContent(e.target.value)}
                       required
                     />
-                    <Button type="submit" disabled={loading}>
-                      {loading ? 'Posting...' : 'Post Answer'}
+                    <Button type="submit" disabled={loading} className="bg-indigo-600 hover:bg-indigo-700">
+                      {loading ? 'Posting & Fact-checking...' : 'Post Answer (Will be AI-verified)'}
                     </Button>
                   </form>
                 </CardContent>
@@ -622,22 +770,22 @@ function App() {
         )}
       </div>
 
-      {/* AI Chat Button */}
+      {/* AI Immigration Assistant Button */}
       <Button
-        className="fixed bottom-6 right-6 rounded-full w-14 h-14 shadow-lg"
+        className="fixed bottom-6 right-6 rounded-full w-14 h-14 shadow-lg bg-indigo-600 hover:bg-indigo-700"
         onClick={() => setIsChatOpen(true)}
       >
         <Bot className="h-6 w-6" />
       </Button>
 
-      {/* AI Chat Dialog */}
+      {/* AI Immigration Assistant Dialog */}
       {isChatOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <Card className="w-full max-w-md h-96 flex flex-col">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center">
-                <Bot className="h-5 w-5 mr-2" />
-                AI Assistant
+                <Bot className="h-5 w-5 mr-2 text-indigo-600" />
+                Immigration AI Assistant
               </CardTitle>
               <Button variant="outline" size="sm" onClick={() => setIsChatOpen(false)}>
                 <X className="h-4 w-4" />
@@ -647,25 +795,31 @@ function App() {
               <div className="flex-1 overflow-y-auto space-y-3 mb-4">
                 {chatMessages.length === 0 && (
                   <div className="text-center text-slate-500 py-8">
-                    <Bot className="h-8 w-8 mx-auto mb-2" />
-                    <p>Hi! I'm your AI assistant. How can I help you today?</p>
+                    <Bot className="h-8 w-8 mx-auto mb-2 text-indigo-600" />
+                    <p className="text-sm">Hi! I'm your immigration AI assistant. I can help with:</p>
+                    <ul className="text-xs mt-2 space-y-1">
+                      <li>• Immigration processes and requirements</li>
+                      <li>• Document preparation guidance</li>
+                      <li>• Timeline estimates</li>
+                      <li>• General immigration advice</li>
+                    </ul>
                   </div>
                 )}
                 {chatMessages.map((message, index) => (
                   <div key={index} className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-xs px-3 py-2 rounded-lg ${
                       message.sender === 'user' 
-                        ? 'bg-blue-500 text-white' 
+                        ? 'bg-indigo-500 text-white' 
                         : 'bg-slate-100 text-slate-800'
                     }`}>
-                      {message.text}
+                      <div className="text-sm whitespace-pre-wrap">{message.text}</div>
                     </div>
                   </div>
                 ))}
               </div>
               <div className="flex items-center space-x-2">
                 <Input
-                  placeholder="Ask me anything..."
+                  placeholder="Ask about immigration..."
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleChatMessage()}
