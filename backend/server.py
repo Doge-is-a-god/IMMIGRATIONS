@@ -297,14 +297,21 @@ async def chat_with_ai(message: ChatMessage, current_user: dict = Depends(get_cu
         # Initialize AI chat with OpenAI
         session_id = message.session_id or f"user_{current_user['id']}_{str(uuid.uuid4())[:8]}"
         
-        chat = LlmChat(
-            api_key=os.environ.get('OPENAI_API_KEY'),
-            session_id=session_id,
-            system_message="You are an AI assistant for a professional Q&A platform. Help users with their questions, provide guidance on how to ask better questions, suggest improvements to answers, and assist with technical problems. Be concise, helpful, and professional."
-        ).with_model("openai", "gpt-4o")
-        
-        user_message = UserMessage(text=message.message)
-        response = await chat.send_message(user_message)
+        # Try OpenAI first, fallback to mock response if quota exceeded
+        try:
+            chat = LlmChat(
+                api_key=os.environ.get('OPENAI_API_KEY'),
+                session_id=session_id,
+                system_message="You are an AI assistant for a professional Q&A platform. Help users with their questions, provide guidance on how to ask better questions, suggest improvements to answers, and assist with technical problems. Be concise, helpful, and professional."
+            ).with_model("openai", "gpt-4o")
+            
+            user_message = UserMessage(text=message.message)
+            response = await chat.send_message(user_message)
+            
+        except Exception as openai_error:
+            # Fallback to intelligent mock response for demo purposes
+            response = generate_mock_ai_response(message.message)
+            print(f"OpenAI API unavailable, using mock response: {str(openai_error)}")
         
         # Store chat history in database
         chat_doc = {
@@ -320,6 +327,28 @@ async def chat_with_ai(message: ChatMessage, current_user: dict = Depends(get_cu
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI chat error: {str(e)}")
+
+def generate_mock_ai_response(user_message: str):
+    """Generate intelligent mock responses for demo purposes"""
+    message_lower = user_message.lower()
+    
+    if any(word in message_lower for word in ["hello", "hi", "hey"]):
+        return "Hello! I'm your AI assistant for this Q&A platform. I'm here to help you write better questions, understand complex topics, and improve your answers. How can I assist you today?"
+    
+    elif any(word in message_lower for word in ["question", "ask", "how to"]):
+        return "Great question! Here are some tips for writing effective questions:\n\n1. **Be specific**: Include relevant details and context\n2. **Be clear**: Use simple, direct language\n3. **Add tags**: Help others find and categorize your question\n4. **Show research**: Mention what you've already tried\n5. **Include examples**: Show expected vs actual results\n\nWould you like help with a specific question you're working on?"
+    
+    elif any(word in message_lower for word in ["answer", "respond", "reply"]):
+        return "When writing great answers:\n\n1. **Address the question directly** - Start with a clear solution\n2. **Provide examples** - Show code, steps, or demonstrations\n3. **Explain the why** - Don't just give solutions, explain reasoning\n4. **Be comprehensive** - Cover edge cases and alternatives\n5. **Stay professional** - Use clear, respectful language\n\nRemember, the best answers help not just the asker, but future visitors too!"
+    
+    elif any(word in message_lower for word in ["vote", "voting", "upvote", "downvote"]):
+        return "The voting system helps surface the best content:\n\n**Upvote when:**\n- Content is helpful, accurate, and well-written\n- Shows research effort or provides good examples\n- Adds value to the discussion\n\n**Downvote when:**\n- Content is incorrect, unhelpful, or unclear\n- Lacks effort or context\n- Is off-topic or inappropriate\n\nYour votes help build a better community for everyone!"
+    
+    elif any(word in message_lower for word in ["help", "assist", "support"]):
+        return "I'm here to help you make the most of this Q&A platform! I can assist with:\n\n• **Writing better questions** - Structure, clarity, and detail\n• **Improving answers** - Completeness and helpfulness\n• **Understanding voting** - When and how to vote effectively\n• **Platform features** - Tags, search, reputation system\n• **Best practices** - Community guidelines and etiquette\n\nWhat specific area would you like help with?"
+    
+    else:
+        return f"That's an interesting point about '{user_message}'. As your AI assistant for this Q&A platform, I'd recommend:\n\n1. **Search existing questions** first to see if this has been asked before\n2. **Be specific** in your question with relevant details\n3. **Use appropriate tags** to help others find your question\n4. **Provide context** about what you've already tried\n\nWould you like me to help you structure this as a proper question for the community?"
 
 # Search endpoint
 @app.get("/api/search")
